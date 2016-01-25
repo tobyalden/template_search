@@ -1,8 +1,11 @@
 from sys import argv
 
 filename = argv[1]
+search = argv[2]
+template = open(filename)
 
-txt = open(filename)
+print "Searching %r..." % filename
+for index, line in enumerate(template):
+	if search in line : print index, line,
 
-print "Here's your file %r:" % filename
-print txt.read()
+template.close()
