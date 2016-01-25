@@ -1,0 +1,322 @@
+{% import "_utils.html" as utils %}
+{% import "release/_macro.html" as release %}
+{% from "broadcast/_macro.html" import broadcast %}
+{% import "lists/_macro.html" as list %}
+{% import "recommendations/_macro.html" as recs %}
+{% import "m/_macro.html" as m %}
+{% do utils.add_page_class('aside_right') %}
+{% from "videos/_macro.html" import videos_sidebar %}
+{% from "components/abuse.html" import abuse_menu %}
+{% from "components/share.html" import share, shortcut %}
+{% from "components/rating.html" import rating %}
+{% from "components/cards.html" import cards %}
+{% from "components/report_abuse.html" import report_abuse_link, report_abuse_modal %}
+{% extends "base.html" %}
+{% do js_loads.require("sections/recommendations.js") %}
+{% do js_loads.require("sections/release.js") %}
+{% do js.require('recommendations') %}
+{% do js.require('release') %}
+
+{% block js_templates %}
+    {{ super() }}
+    {{ release.notes_field_js_templates() }}
+{% endblock %}
+
+{% block page_styles %}
+    {{ h.css_tag("components/image_gallery.css") }}
+{% endblock %}
+
+{% block page_title %}
+{{ c.obj.pagetitle() }}
+{% endblock %}
+
+{% block additional_meta_tags %}
+    {% with meta_desc = release.format_meta_description(c.obj) %}
+        {% call() release.meta_twitter_card(c.obj) %}
+            {{- meta_desc -}}
+        {% endcall %}
+
+        {% call() release.meta_facebook_card(c.obj) %}
+            {{- meta_desc -}}
+        {% endcall %}
+    {% endwith %}
+    {% if c.obj is release and c.obj.is_draft %}
+        <meta name="robots" content="noindex">
+    {% endif %}
+{% endblock %}
+
+{% block ad_top %}
+    {{ utils.ad_container('top') if not c.obj.is_ad_restricted }}
+{% endblock %}
+
+{% block ad_bottom %}
+    {{ utils.ad_container('bottom') if not c.obj.is_ad_restricted }}
+{% endblock %}
+
+{% block page_content %}
+
+    {% if c.obj is release and current_user.is_admin %}
+        {{ abuse_menu(c.obj.abuse_report, 'release') }}
+    {% endif %}
+
+    {% call release.render(rel_obj=c.obj, explore=True) %}
+        {% if d.is_mobile and c.obj is release %}
+            {{ release.release_mobile_menu(c.obj) }}
+        {% endif %}
+    {% endcall %}
+
+    {% macro _versions_title() %}
+        {% if c.obj is master %}
+            {% trans %}Versions{% endtrans %} ({{ c.num_versions }})
+        {% else %}
+            {% trans other_versions=c.versions|length , num_versions=c.num_versions %}Other Versions ({{ other_versions }} of {{ num_versions }}){% endtrans %}
+            {% set master_url = url_for('master.view', master_id=c.obj['master_id']) %}
+            <a href="{{ master_url }}">{% trans %}View All{% endtrans %}</a>
+        {% endif %}
+    {% endmacro %}
+
+    {% if c.versions|length > 0 %}
+        {% call release.toggle_section(_versions_title(), 'm_versions') %}
+            {{ cards('versions', c.versions, 'sm', table=True, sort=True) }}
+            {% if c.obj is master and  current_user.is_authenticated %}
+                <p>
+                    {% trans %}Your version not on Discogs?{% endtrans %}
+                    <a href="{{ url_for('release.copy', id=c.obj['main_id']) }}">
+                        {% trans %}Add a release{% endtrans %}
+                    </a>
+                </p>
+            {% endif %}
+        {% endcall %}
+    {% endif %}
+
+    {% if c.num_recs %}
+        {{ recs.slider() }}
+    {% endif %}
+
+    {% if c.obj is master or (c.obj is release and not c.obj.is_draft) %}
+        {% include "reviews/section.html" %}
+    {% endif %}
+
+{% endblock %}
+
+{% block page_aside %}
+    <div class="section first hide_mobile">
+        {{ shortcut('[%s%s]' % (c.obj.what().lower(), c.obj.id()), _('Select Release Code')) }}
+        {% if c.obj is master %}
+            {% set edit_url = url_for('history.history', master=c.obj['master_id']) ~ "#latest" %}
+        {% else %}
+            {% set edit_url = url_for('history.history', release=c.obj['release_id']) ~ "#latest" %}
+        {% endif %}
+        <h3>
+            {{ 'Release' if c.obj is release else 'Master Release' }}
+        </h3>
+
+        <div class="section_content">
+            <a href="{{ edit_url }}" id="edit_link">
+                {%- if c.obj is master -%}
+                    {% trans %}Edit Master Release{% endtrans %}
+                {%- else -%}
+                    {% trans %}Edit Release{% endtrans %}
+                {%- endif -%}
+            </a>
+            <br />
+            {% if c.obj is release and c.obj.master_id %}
+                <a href="{{ url_for("release.view_master", text=c.release.url_name(), master_id=c.release.master_id) }}">All Versions of this Release</a>
+                <br />
+            {% endif %}
+
+            <span class="release_view_status_wrap">
+                {% if c.is_draft %}
+                    {% trans %}Draft{% endtrans %}
+                {% elif c.is_new %}
+                    {% trans %}New Submission{% endtrans %}
+                {% elif c.needs_vote %}
+                    {% trans %}Review Changes{% endtrans %}
+                {% elif c.needs_changes %}
+                    {% trans %}Needs Changes{% endtrans %}
+                {% else %}
+                    {% trans %}Data Correct{% endtrans %}
+                {% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="
+        section collections card_model_partial release_collections_menu
+        {% set skittle_data = c.obj|attr('_skittles') or {} %}
+        {% if c.obj is release %}
+            {{- " card_in_collection" if skittle_data.get('collection', []) -}}
+            {{- " card_in_wantlist" if skittle_data.get('wantlist', []) -}}
+            {{- " card_in_inventory" if skittle_data.get('inventory', []) -}}
+        {% else %}
+            {{- " card_in_wantlist" if skittle_data.get('wantlist', []) -}}
+        {% endif %}
+        ">
+        <div class="section_content">
+            <div class="collections_buttons hide_mobile">
+                {% if c.obj is release %}
+                    <a class="button button_small add_to_collection">
+                        <i class="icon icon-collection"></i> {% trans %}Add to Collection{% endtrans %}
+                    </a>
+                    <a class="button button_small toggle_wantlist">
+                        <span class="toggle_wantlist_add"><i class="icon icon-wantlist"></i> {% trans %}Add to Wantlist{% endtrans %}</span>
+                        <span class="toggle_wantlist_remove"><i class="icon icon-minus"></i> {% trans %}Remove from Wantlist{% endtrans %}</span>
+                    </a>
+                {% else %}
+                    <a class="button button_small want_add_all_button">
+                        <span class="toggle_wantlist_add">{% trans %}Add all to Wantlist{% endtrans %}</span>
+                        <span class="toggle_wantlist_remove">{% trans %}Remove all from Wantlist{% endtrans %}</span>
+                    </a>
+                {% endif %}
+            </div>
+
+            {% if c.obj is release %}
+                {% for item in c.collection %}
+                    {{ release.block(item, c.collection_fields, 'collection') }}
+                {% endfor %}
+
+                {% if c.wantlist %}
+                    {{ release.block(c.wantlist, type='wantlist') }}
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    {% if c.obj is release and not c.obj.is_draft %}
+        {% set shop_url = url_for("marketplace.list.mprelease", release_id=c.obj.id(), ev="rb") %}
+        {% if c.num_sale == 0 %}
+            {% set shop_url = url_for("marketplace.list.mplist", q=c.obj.artist_title(), ev="is") %}
+        {% endif %}
+
+        {% set shop_component = c.shopping_template %}
+
+        {% if c.release.fileFormatOnly() %}
+            {{ file_format_section() }}
+        {% elif c.sell_blocked %}
+            {{ sell_blocked_section() }}
+        {% else %}
+            {{ m.shopping_box(
+                num=c.num_sale,
+                url=shop_url,
+                alt=_('Search Similar'),
+                sell_url=url_for('marketplace.inventory.post', release_id=c.obj.id())
+                )
+            }}
+        {% endif %}
+
+    {% elif c.obj is master %}
+        {% set shop_url = url_for("marketplace.list.mplist", master_id=c.obj.id(), ev="mb") %}
+
+        {% if c.num_sale == 0 %}
+            {% set shop_url = url_for("marketplace.list.mplist", q=c.obj.artist_title(), ev="is") %}
+        {% endif %}
+
+        {% set shop_component = c.shopping_template %}
+
+        {% if c.obj.fileFormatOnly() %}
+            {{ file_format_section() }}
+        {% elif c.sell_blocked %}
+            {{ sell_blocked_section() }}
+        {% else %}
+            {{ m.shopping_box(
+                num=c.num_sale,
+                url=shop_url,
+                alt=_('Buy Similar Items'),
+                sell_url=url_for('marketplace.inventory.master', master_id=c.obj.id())
+                )
+            }}
+        {% endif %}
+
+    {% endif %}
+
+    {% if not d.is_mobile and not c.obj.is_ad_restricted %}
+        <div class="section">
+            <div class="section_content">
+                {{ utils.ad_container('right') }}
+            </div>
+        </div>
+    {% endif %}
+
+    {% if not c.obj.is_draft %}
+        <div class="section social">
+            <div class="section_content">
+                {% if c.obj is release %}
+                    <div class="rating_wrapper">
+                        {% set rating_post_url = url_for('release.rate', release_id=c.release.id()) %}
+                        {{ rating(post_url=rating_post_url, value=c.rating_my, stats=False) }}
+                    </div>
+                {% endif %}
+                {% if not (c.obj.is_draft or d.is_mobile) %}
+                    <div class="share_link_wrapper">
+                        {% set url = 'http://www.discogs.com%s' % c.obj.uri() %}
+                        {{ share(c.obj.title, url) }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    {% call release.toggle_section(_('Statistics'), 'statistics') %}
+        {% if c.obj is release %}
+            {% set stats_url = url_for('release/stats', id=c.release_id) %}
+        {% else %}
+            {% set stats_url = url_for('master/stats', master_id=c.master_id) %}
+        {% endif %}
+
+        {{ release.statistics_table(
+            pagetype=c.pagetype,
+            db_stats={
+                'title': c.obj.artist_title(),
+                'obid': c.obj.id(),
+                'url': stats_url,
+                'num_have': c.num_have,
+                'num_want': c.num_want,
+                'rating_value': c.rating_value,
+                'num_ratings': c.rating_count,
+            },
+            mp_stats={
+                'obid': c.obj.id(),
+                'last_sale_date': c.last_sale_date,
+                'history_url': url_for('marketplace.item.history', release_id=c.release_id),
+                'min': c.stats.min if c.stats else None,
+                'median': c.stats.median if c.stats else None,
+                'max': c.stats.max if c.stats else None,
+            } if not c.sell_blocked else {}
+        ) }}
+    {% endcall %}
+
+    {{ videos_sidebar(readonly=c.obj is master) }}
+
+    {{ list.lists_prev() }}
+
+    {% if c.obj is release %}
+        {{ release.contribute() }}
+        {% if current_user.is_authenticated and not current_user.is_banned %}
+            {{ report_abuse_modal(what='release', obid=c.obj.id(), nonspam_shortreason='offensivematerial') }}
+            <div class="section report">
+                <div class="section_content">
+                    <hr />
+                    {{ report_abuse_link() }}
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+{% endblock %}
+
+{% macro sell_blocked_section() %}
+    <div class="section">
+        <h3>{% trans %}Marketplace{% endtrans %}</h3>
+        <div class="section_content">
+            <p>{% trans %}This release has been blocked from sale in the marketplace. It is not permitted to sell this item on Discogs.{% endtrans %}</p>
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro file_format_section() %}
+    <div class="section">
+        <h3>{% trans %}Marketplace{% endtrans %}</h3>
+        <div class="section_content">
+            <p>{% trans %}Digital content is not available for sale or trade on Discogs.{% endtrans %}</p>
+        </div>
+    </div>
+{% endmacro %}
